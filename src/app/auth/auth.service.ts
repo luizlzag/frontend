@@ -41,6 +41,13 @@ export class AuthService {
 
   readonly githubLoginUrl = `${API_URL}/auth/github`;
 
+  loginAsGuest() {
+    return this.http.post<{ access_token: string; user: { id: string; username: string } }>(
+      `${API_URL}/auth/guest`,
+      {}
+    );
+  }
+
   saveAuth(token: string, user: string): void {
     this.tokenSignal.set(token);
     this.userSignal.set(user);

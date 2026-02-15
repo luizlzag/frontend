@@ -36,6 +36,7 @@
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+  overflow: hidden;
 }
 
 .column-add {
@@ -47,6 +48,12 @@
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
+  min-width: 0;
+}
+
+.column-header .input-edit {
+  flex: 1;
+  min-width: 0;
 }
 
 .column-title {
@@ -67,6 +74,7 @@
   flex-direction: column;
   gap: 0.5rem;
   min-height: 40px;
+  min-width: 0;
 }
 
 .card {
@@ -77,10 +85,14 @@
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .card-content {
   flex: 1;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .card-title {
@@ -88,6 +100,7 @@
   font-size: 0.9375rem;
   font-weight: 500;
   color: #f8fafc;
+  word-break: break-word;
 }
 
 .card-desc {
@@ -116,11 +129,16 @@
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .input-edit,
 .textarea-edit {
   width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
   padding: 0.5rem 0.75rem;
   font-size: 0.875rem;
   color: #f8fafc;

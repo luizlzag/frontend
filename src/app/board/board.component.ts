@@ -1,8 +1,10 @@
-import { Component, inject, signal, OnInit } from '@angular/core';
+import { Component, inject, signal, OnInit, OnDestroy } from '@angular/core';
 import { CdkDrag, CdkDragDrop, CdkDropList, CdkDropListGroup } from '@angular/cdk/drag-drop';
 import { NgIcon } from '@ng-icons/core';
+import { Subject, takeUntil } from 'rxjs';
 import { ColumnsService } from '../core/services/columns.service';
 import { CardsService } from '../core/services/cards.service';
+import { KanbanSocketService } from '../core/services/kanban-socket.service';
 import type { Column, Card } from '../core/models';
 
 @Component({
@@ -12,9 +14,11 @@ import type { Column, Card } from '../core/models';
   templateUrl: './board.component.html',
   styleUrl: './board.component.css',
 })
-export class BoardComponent implements OnInit {
+export class BoardComponent implements OnInit, OnDestroy {
   private columnsSvc = inject(ColumnsService);
   private cardsSvc = inject(CardsService);
+  private socketSvc = inject(KanbanSocketService);
+  private destroy$ = new Subject<void>();
 
   protected columns = signal<Column[]>([]);
   protected loading = signal(true);
@@ -34,6 +38,93 @@ export class BoardComponent implements OnInit {
 
   ngOnInit(): void {
     this.loadColumns();
+    this.socketSvc.connect();
+    this.setupSocketListeners();
+  }
+
+  ngOnDestroy(): void {
+    this.destroy$.next();
+    this.destroy$.complete();
+  }
+
+  private setupSocketListeners(): void {
+    this.socketSvc.cardCreated$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((card) => this.handleCardCreated(card));
+    this.socketSvc.cardUpdated$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((card) => this.handleCardUpdated(card));
+    this.socketSvc.cardDeleted$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((card) => this.handleCardDeleted(card));
+    this.socketSvc.columnCreated$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((col) => this.handleColumnCreated(col));
+    this.socketSvc.columnUpdated$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((col) => this.handleColumnUpdated(col));
+    this.socketSvc.columnDeleted$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((col) => this.handleColumnDeleted(col));
+  }
+
+  private handleCardCreated(card: Card): void {
+    const columnId = card.columnId ?? card.column?.id;
+    if (!columnId) return;
+    this.columns.update((cols) => {
+      const colIndex = cols.findIndex((c) => c.id === columnId);
+      if (colIndex === -1) return cols;
+      const newCols = cols.map((c, i) =>
+        i === colIndex
+          ? { ...c, cards: [...(c.cards || []), card] }
+          : { ...c, cards: [...(c.cards || [])] }
+      );
+      return newCols.sort((a, b) => a.order - b.order);
+    });
+  }
+
+  private handleCardUpdated(card: Card): void {
+    const columnId = card.columnId ?? card.column?.id;
+    if (!columnId) return;
+    this.columns.update((cols) => {
+      const newColIndex = cols.findIndex((c) => c.id === columnId);
+      if (newColIndex === -1) return cols;
+
+      return cols
+        .map((c, i) => {
+          const cards = (c.cards || []).filter((x) => x.id !== card.id);
+          if (i === newColIndex) return { ...c, cards: [...cards, card] };
+          return { ...c, cards };
+        })
+        .sort((a, b) => a.order - b.order);
+    });
+  }
+
+  private handleCardDeleted(card: Card): void {
+    this.columns.update((cols) =>
+      cols.map((c) => ({
+        ...c,
+        cards: (c.cards || []).filter((x) => x.id !== card.id),
+      }))
+    );
+  }
+
+  private handleColumnCreated(column: Column): void {
+    this.columns.update((cols) => {
+      const exists = cols.some((c) => c.id === column.id);
+      if (exists) return cols;
+      return [...cols, column].sort((a, b) => a.order - b.order);
+    });
+  }
+
+  private handleColumnUpdated(column: Column): void {
+    this.columns.update((cols) =>
+      cols.map((c) => (c.id === column.id ? column : c)).sort((a, b) => a.order - b.order)
+    );
+  }
+
+  private handleColumnDeleted(column: Column): void {
+    this.columns.update((cols) => cols.filter((c) => c.id !== column.id));
   }
 
   loadColumns(): void {
@@ -67,10 +158,7 @@ export class BoardComponent implements OnInit {
     if (!name) return;
     const order = this.columns().length;
     this.columnsSvc.create({ name, order }).subscribe({
-      next: () => {
-        this.cancelAddColumn();
-        this.loadColumns();
-      },
+      next: () => this.cancelAddColumn(),
       error: (err) => this.error.set(err.error?.message || 'Erro ao criar coluna'),
     });
   }
@@ -91,10 +179,7 @@ export class BoardComponent implements OnInit {
     const name = this.editColumnName().trim();
     if (!name) return;
     this.columnsSvc.update(id, { name }).subscribe({
-      next: () => {
-        this.cancelEditColumn();
-        this.loadColumns();
-      },
+      next: () => this.cancelEditColumn(),
       error: (err) => this.error.set(err.error?.message || 'Erro ao atualizar coluna'),
     });
   }
@@ -102,7 +187,7 @@ export class BoardComponent implements OnInit {
   deleteColumn(col: Column): void {
     if (!confirm(`Excluir coluna "${col.name}" e todos os cards?`)) return;
     this.columnsSvc.delete(col.id).subscribe({
-      next: () => this.loadColumns(),
+      next: () => {},
       error: (err) => this.error.set(err.error?.message || 'Erro ao excluir coluna'),
     });
   }
@@ -125,10 +210,7 @@ export class BoardComponent implements OnInit {
     const title = this.newCardTitle().trim();
     if (!title) return;
     this.cardsSvc.create({ title, content: this.newCardContent().trim() || undefined, columnId }).subscribe({
-      next: () => {
-        this.cancelAddCard();
-        this.loadColumns();
-      },
+      next: () => this.cancelAddCard(),
       error: (err) => this.error.set(err.error?.message || 'Erro ao criar card'),
     });
   }
@@ -151,10 +233,7 @@ export class BoardComponent implements OnInit {
     const title = this.editCardTitle().trim();
     if (!title) return;
     this.cardsSvc.update(id, { title, content: this.editCardContent().trim() || undefined }).subscribe({
-      next: () => {
-        this.cancelEditCard();
-        this.loadColumns();
-      },
+      next: () => this.cancelEditCard(),
       error: (err) => this.error.set(err.error?.message || 'Erro ao atualizar card'),
     });
   }
@@ -180,7 +259,7 @@ export class BoardComponent implements OnInit {
   deleteCard(card: Card): void {
     if (!confirm(`Excluir card "${card.title}"?`)) return;
     this.cardsSvc.delete(card.id).subscribe({
-      next: () => this.loadColumns(),
+      next: () => {},
       error: (err) => this.error.set(err.error?.message || 'Erro ao excluir card'),
     });
   }
@@ -198,7 +277,7 @@ export class BoardComponent implements OnInit {
     if (card.columnId === targetColumn.id) return;
 
     this.cardsSvc.move(card.id, targetColumn.id).subscribe({
-      next: () => this.loadColumns(),
+      next: () => this.cancelMoveCard(),
       error: () => this.loadColumns(),
     });
   }

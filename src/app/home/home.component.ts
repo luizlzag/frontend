@@ -1,6 +1,7 @@
 import { Component, inject, signal, HostListener, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 import { AuthService } from '../auth/auth.service';
+import { KanbanSocketService } from '../core/services/kanban-socket.service';
 import { BoardComponent } from '../board/board.component';
 
 @Component({
@@ -13,6 +14,7 @@ import { BoardComponent } from '../board/board.component';
 export class HomeComponent implements OnInit {
   protected auth = inject(AuthService);
   private router = inject(Router);
+  private socketSvc = inject(KanbanSocketService);
 
   protected dropdownOpen = signal(false);
 
@@ -33,6 +35,7 @@ export class HomeComponent implements OnInit {
   }
 
   logout(): void {
+    this.socketSvc.disconnect();
     this.auth.logout();
     this.router.navigate(['/login']);
   }

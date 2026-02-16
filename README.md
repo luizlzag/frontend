@@ -1,59 +1,102 @@
-# Frontend
+# Kanban Frontend
 
-This project was generated using [Angular CLI](https://github.com/angular/angular-cli) version 21.1.4.
+Aplicação Angular para gerenciamento de board Kanban com autenticação (GitHub OAuth e convidado), CRUD de colunas e cards, e atualizações em tempo real via Socket.IO.
 
-## Development server
+## Stack
 
-To start a local development server, run:
+- Angular 21 (standalone components, signals)
+- Angular CDK (drag-and-drop)
+- RxJS 7.8
+- Socket.IO Client 4.8
+- ng-icons (Heroicons)
 
-```bash
-ng serve
-```
+## Requisitos
 
-Once the server is running, open your browser and navigate to `http://localhost:4200/`. The application will automatically reload whenever you modify any of the source files.
+- Node.js 18+
+- npm 11+
 
-## Code scaffolding
-
-Angular CLI includes powerful code scaffolding tools. To generate a new component, run:
-
-```bash
-ng generate component component-name
-```
-
-For a complete list of available schematics (such as `components`, `directives`, or `pipes`), run:
+## Instalação
 
 ```bash
-ng generate --help
+npm install
 ```
 
-## Building
+## Scripts
 
-To build the project run:
+| Comando | Descrição |
+|---------|-----------|
+| `npm start` | Servidor de desenvolvimento em `http://localhost:4200` |
+| `npm run build` | Build de produção em `dist/` |
+| `npm run watch` | Build em modo watch (dev) |
+| `npm test` | Executa testes |
 
-```bash
-ng build
+## Configuração
+
+A URL da API é definida em `src/app/core/api/api.config.ts`:
+
+```ts
+export const API_URL = 'https://backend-kanban-bhsz.onrender.com';
 ```
 
-This will compile your project and store the build artifacts in the `dist/` directory. By default, the production build optimizes your application for performance and speed.
+Para ambiente local, altere para `http://localhost:3000` (ou a porta do backend).
 
-## Running unit tests
+## Estrutura
 
-To execute unit tests with the [Vitest](https://vitest.dev/) test runner, use the following command:
-
-```bash
-ng test
+```
+src/app/
+├── auth/                 # Autenticação
+│   ├── auth.service.ts   # Token, login guest, GitHub OAuth
+│   ├── auth.interceptor.ts
+│   ├── auth.guard.ts     # authGuard, guestGuard
+│   ├── login/
+│   └── auth-callback/
+├── board/                # Board Kanban
+│   └── board.component   # Colunas, cards, drag-drop
+├── core/
+│   ├── api/api.config.ts
+│   ├── models/           # User, Column, Card
+│   └── services/
+│       ├── columns.service.ts
+│       ├── cards.service.ts
+│       └── kanban-socket.service.ts
+├── home/
+└── shared/
 ```
 
-## Running end-to-end tests
+## Autenticação
 
-For end-to-end (e2e) testing, run:
+- **GitHub:** redireciona para `GET /auth/github`; callback em `/auth/callback` recebe `token` e `user` na query.
+- **Convidado:** `POST /auth/guest` retorna `access_token` e `user`.
+- Token e user são armazenados em `localStorage` (`kanban_token`, `kanban_user`).
+- O interceptor HTTP adiciona `Authorization: Bearer <token>` em todas as requisições autenticadas.
 
-```bash
-ng e2e
-```
+## Rotas
 
-Angular CLI does not come with an end-to-end testing framework by default. You can choose one that suits your needs.
+| Rota | Guard | Descrição |
+|------|-------|-----------|
+| `/login` | guestGuard | Login (GitHub ou convidado) |
+| `/auth/callback` | - | Callback OAuth |
+| `/` | authGuard | Home com board |
 
-## Additional Resources
+## API
 
-For more information on using the Angular CLI, including detailed command references, visit the [Angular CLI Overview and Command Reference](https://angular.dev/tools/cli) page.
+Serviços `ColumnsService` e `CardsService` consomem REST:
+
+- Colunas: `POST/GET/PATCH/DELETE /columns`
+- Cards: `POST/GET/PATCH/DELETE /cards`, `PATCH` para mover entre colunas
+
+Rotas de criação, edição e exclusão exigem token.
+
+## Socket.IO
+
+Namespace `/kanban`. Eventos: `card:created`, `card:updated`, `card:deleted`, `column:created`, `column:updated`, `column:deleted`.
+
+O board atualiza o estado local ao receber eventos, sem recarregar a lista. Drag-and-drop usa atualização otimista: o card muda de coluna imediatamente e reverte em caso de erro na API.
+
+## Board
+
+- Colunas horizontais com scroll
+- Cards com título, conteúdo e autor (avatar ou inicial)
+- Drag-and-drop entre colunas (Angular CDK)
+- CRUD inline (editar coluna/card, mover card, excluir)
+- Overlay de loading em operações assíncronas (criar, editar, mover, excluir)
